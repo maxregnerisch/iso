@@ -1016,318 +1016,318 @@ _build_iso_image() {
             -rational-rock \
             -volid "${iso_label}" \
             -appid "${iso_application}" \
-            -publisher "${iso_publisher}" \
-            -preparer "prepared by ${app_name}" \
-            "${xorrisofs_options[@]}" \
-            -output "${out_dir}/${image_name}" \
-            "${isofs_dir}/"
-    _msg_info "Done!"
-    du -h -- "${out_dir}/${image_name}"
-}
+                        -publisher "${iso_publisher}" \
+                        -preparer "prepared by ${app_name}" \
+                        "${xorrisofs_options[@]}" \
+                        -output "${out_dir}/${image_name}" \
+                        "${isofs_dir}/"
+                _msg_info "Done!"
+                du -h -- "${out_dir}/${image_name}"
+            }
 
-# Read profile's values from profiledef.sh
-_read_profile() {
-    if [[ -z "${profile}" ]]; then
-        _msg_error "No profile specified!" 1
-    fi
-    if [[ ! -d "${profile}" ]]; then
-        _msg_error "Profile '${profile}' does not exist!" 1
-    elif [[ ! -e "${profile}/profiledef.sh" ]]; then
-        _msg_error "Profile '${profile}' is missing 'profiledef.sh'!" 1
-    else
-        cd -- "${profile}"
+            # Read profile's values from profiledef.sh
+            _read_profile() {
+                if [[ -z "${profile}" ]]; then
+                    _msg_error "No profile specified!" 1
+                fi
+                if [[ ! -d "${profile}" ]]; then
+                    _msg_error "Profile '${profile}' does not exist!" 1
+                elif [[ ! -e "${profile}/profiledef.sh" ]]; then
+                    _msg_error "Profile '${profile}' is missing 'profiledef.sh'!" 1
+                else
+                    cd -- "${profile}"
 
-        # Source profile's variables
-        # shellcheck source=configs/releng/profiledef.sh
-        . "${profile}/profiledef.sh"
+                    # Source profile's variables
+                    # shellcheck source=configs/releng/profiledef.sh
+                    . "${profile}/profiledef.sh"
 
-        # Resolve paths of files that are expected to reside in the profile's directory
-        [[ -n "$packages" ]] || packages="${profile}/packages.${arch}"
-        packages="$(realpath -- "${packages}")"
-        pacman_conf="$(realpath -- "${pacman_conf}")"
+                    # Resolve paths of files that are expected to reside in the profile's directory
+                    [[ -n "$packages" ]] || packages="${profile}/packages.${arch}"
+                    packages="$(realpath -- "${packages}")"
+                    pacman_conf="$(realpath -- "${pacman_conf}")"
 
-        # Resolve paths of files that may reside in the profile's directory
-        if [[ -z "$bootstrap_packages" ]] && [[ -e "${profile}/bootstrap_packages.${arch}" ]]; then
-            bootstrap_packages="${profile}/bootstrap_packages.${arch}"
-            bootstrap_packages="$(realpath -- "${bootstrap_packages}")"
-            pacman_conf="$(realpath -- "${pacman_conf}")"
-        fi
+                    # Resolve paths of files that may reside in the profile's directory
+                    if [[ -z "$bootstrap_packages" ]] && [[ -e "${profile}/bootstrap_packages.${arch}" ]]; then
+                        bootstrap_packages="${profile}/bootstrap_packages.${arch}"
+                        bootstrap_packages="$(realpath -- "${bootstrap_packages}")"
+                        pacman_conf="$(realpath -- "${pacman_conf}")"
+                    fi
 
-        cd -- "${OLDPWD}"
-    fi
-}
+                    cd -- "${OLDPWD}"
+                fi
+            }
 
-# Validate set options
-_validate_options() {
-    local validation_error=0 _buildmode
+            # Validate set options
+            _validate_options() {
+                local validation_error=0 _buildmode
 
-    _msg_info "Validating options..."
+                _msg_info "Validating options..."
 
-    # Check if pacman configuration file exists
-    if [[ ! -e "${pacman_conf}" ]]; then
-        (( validation_error=validation_error+1 ))
-        _msg_error "File '${pacman_conf}' does not exist." 0
-    fi
+                # Check if pacman configuration file exists
+                if [[ ! -e "${pacman_conf}" ]]; then
+                    (( validation_error=validation_error+1 ))
+                    _msg_error "File '${pacman_conf}' does not exist." 0
+                fi
 
-    # Check if the specified buildmodes are supported
-    for _buildmode in "${buildmodes[@]}"; do
-        if typeset -f "_build_buildmode_${_buildmode}" &> /dev/null; then
-            if typeset -f "_validate_requirements_buildmode_${_buildmode}" &> /dev/null; then
-                "_validate_requirements_buildmode_${_buildmode}"
-            else
-                _msg_warning "Function '_validate_requirements_buildmode_${_buildmode}' does not exist. Validating the requirements of '${_buildmode}' build mode will not be possible."
+                # Check if the specified buildmodes are supported
+                for _buildmode in "${buildmodes[@]}"; do
+                    if typeset -f "_build_buildmode_${_buildmode}" &> /dev/null; then
+                        if typeset -f "_validate_requirements_buildmode_${_buildmode}" &> /dev/null; then
+                            "_validate_requirements_buildmode_${_buildmode}"
+                        else
+                            _msg_warning "Function '_validate_requirements_buildmode_${_buildmode}' does not exist. Validating the requirements of '${_buildmode}' build mode will not be possible."
+                        fi
+                    else
+                        (( validation_error=validation_error+1 ))
+                        _msg_error "${_buildmode} is not a valid build mode!" 0
+                    fi
+                done
+
+                if (( validation_error )); then
+                    _msg_error "${validation_error} errors were encountered while validating the profile. Aborting." 1
+                fi
+                _msg_info "Done!"
+            }
+
+            # Set defaults and, if present, overrides from mkarchiso command line option parameters
+            _set_overrides() {
+                # Set variables that have command line overrides
+                [[ ! -v override_buildmodes ]] || buildmodes=("${override_buildmodes[@]}")
+                if (( ${#buildmodes[@]} < 1 )); then
+                    buildmodes+=('iso')
+                fi
+                if [[ -v override_work_dir ]]; then
+                    work_dir="$override_work_dir"
+                elif [[ -z "$work_dir" ]]; then
+                    work_dir='./work'
+                fi
+                work_dir="$(realpath -- "$work_dir")"
+                if [[ -v override_out_dir ]]; then
+                    out_dir="$override_out_dir"
+                elif [[ -z "$out_dir" ]]; then
+                    out_dir='./out'
+                fi
+                out_dir="$(realpath -- "$out_dir")"
+                if [[ -v override_pacman_conf ]]; then
+                    pacman_conf="$override_pacman_conf"
+                elif [[ -z "$pacman_conf" ]]; then
+                    pacman_conf="/etc/pacman.conf"
+                fi
+                pacman_conf="$(realpath -- "$pacman_conf")"
+                [[ ! -v override_pkg_list ]] || pkg_list+=("${override_pkg_list[@]}")
+                # TODO: allow overriding bootstrap_pkg_list
+                if [[ -v override_iso_label ]]; then
+                    iso_label="$override_iso_label"
+                elif [[ -z "$iso_label" ]]; then
+                    iso_label="mros"
+                fi
+                if [[ -v override_iso_publisher ]]; then
+                    iso_publisher="$override_iso_publisher"
+                elif [[ -z "$iso_publisher" ]]; then
+                    iso_publisher="mros"
+                fi
+                if [[ -v override_iso_application ]]; then
+                    iso_application="$override_iso_application"
+                elif [[ -z "$iso_application" ]]; then
+                    iso_application="mros iso"
+                fi
+                if [[ -v override_install_dir ]]; then
+                    install_dir="$override_install_dir"
+                elif [[ -z "$install_dir" ]]; then
+                    install_dir="mros"
+                fi
+                [[ ! -v override_gpg_key ]] || gpg_key="$override_gpg_key"
+                [[ ! -v override_gpg_sender ]] || gpg_sender="$override_gpg_sender"
+                if [[ -v override_cert_list ]]; then
+                    sign_netboot_artifacts="y"
+                fi
+                [[ ! -v override_cert_list ]] || cert_list+=("${override_cert_list[@]}")
+                if [[ -v override_quiet ]]; then
+                    quiet="$override_quiet"
+                elif [[ -z "$quiet" ]]; then
+                    quiet="y"
+                fi
+
+                # Set variables that do not have overrides
+                [[ -n "$arch" ]] || arch="$(uname -m)"
+                [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
+                [[ -n "$iso_name" ]] || iso_name="mros"
+            }
+
+            _export_gpg_publickey() {
+                rm -f -- "${work_dir}/pubkey.gpg"
+                gpg --batch --no-armor --output "${work_dir}/pubkey.gpg" --export "${gpg_key}"
+            }
+
+            _make_version() {
+                local _os_release
+
+                _msg_info "Creating version files..."
+                # Write version file to system installation dir
+                rm -f -- "${pacstrap_dir}/version"
+                printf '%s\n' "${iso_version}" > "${pacstrap_dir}/version"
+
+                if [[ "${buildmode}" == @("iso"|"netboot") ]]; then
+                    install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+                    # Write version file to ISO 9660
+                    printf '%s\n' "${iso_version}" > "${isofs_dir}/${install_dir}/version"
+                    # Write grubenv with version information to ISO 9660
+                    printf '%.1024s' "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
+                        "${iso_name}" "${iso_version}" "$(printf '%0.1s' "#"{1..1024})")" \
+                        > "${isofs_dir}/${install_dir}/grubenv"
+                fi
+
+                # Append IMAGE_ID & IMAGE_VERSION to os-release
+                _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
+                if [[ ! -e "${pacstrap_dir}/etc/os-release" && -e "${pacstrap_dir}/usr/lib/os-release" ]]; then
+                    _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
+                fi
+                if [[ "${_os_release}" != "${pacstrap_dir}"* ]]; then
+                    _msg_warning "os-release file '${_os_release}' is outside of valid path."
+                else
+                    [[ ! -e "${_os_release}" ]] || sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' "${_os_release}"
+                    printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' "${iso_name}" "${iso_version}" >> "${_os_release}"
+                fi
+                _msg_info "Done!"
+            }
+
+            _make_pkglist() {
+                _msg_info "Creating a list of installed packages on live-enviroment..."
+                case "${buildmode}" in
+                    "bootstrap")
+                        pacman -Q --sysroot "${pacstrap_dir}" > "${pacstrap_dir}/pkglist.${arch}.txt"
+                        ;;
+                    "iso"|"netboot")
+                        install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+                        pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
+                        ;;
+                esac
+                _msg_info "Done!"
+            }
+
+            # build the base for an ISO and/or a netboot target
+            _build_iso_base() {
+                local run_once_mode="base"
+                local buildmode_packages="${packages}"
+                # Set the package list to use
+                local buildmode_pkg_list=("${pkg_list[@]}")
+                # Set up essential directory paths
+                pacstrap_dir="${work_dir}/${arch}/airootfs"
+                isofs_dir="${work_dir}/iso"
+
+                # Create working directory
+                [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
+                # Write build date to file or if the file exists, read it from there
+                if [[ -e "${work_dir}/build_date" ]]; then
+                    SOURCE_DATE_EPOCH="$(<"${work_dir}/build_date")"
+                else
+                    printf '%s\n' "$SOURCE_DATE_EPOCH" > "${work_dir}/build_date"
+                fi
+
+                [[ "${quiet}" == "y" ]] || _show_config
+                _run_once _make_pacman_conf
+                [[ -z "${gpg_key}" ]] || _run_once _export_gpg_publickey
+                _run_once _make_custom_airootfs
+                _run_once _make_packages
+                _run_once _make_version
+                _run_once _make_customize_airootfs
+                _run_once _make_pkglist
+                _make_bootmodes
+                _run_once _cleanup_pacstrap_dir
+                _run_once _prepare_airootfs_image
+            }
+
+            # Build the bootstrap buildmode
+            _build_buildmode_bootstrap() {
+                local image_name="${iso_name}-bootstrap-${iso_version}-${arch}.tar.gz"
+                local run_once_mode="${buildmode}"
+                local buildmode_packages="${bootstrap_packages}"
+                # Set the package list to use
+                local buildmode_pkg_list=("${bootstrap_pkg_list[@]}")
+
+                # Set up essential directory paths
+                pacstrap_dir="${work_dir}/${arch}/bootstrap/root.${arch}"
+                [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
+                install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
+
+                [[ "${quiet}" == "y" ]] || _show_config
+                _run_once _make_pacman_conf
+                _run_once _make_packages
+                _run_once _make_version
+                _run_once _make_pkglist
+                _run_once _cleanup_pacstrap_dir
+                _run_once _build_bootstrap_image
+            }
+
+            # Build the netboot buildmode
+            _build_buildmode_netboot() {
+                local run_once_mode="${buildmode}"
+
+                _build_iso_base
+                if [[ -v cert_list ]]; then
+                    _run_once _sign_netboot_artifacts
+                fi
+                _run_once _export_netboot_artifacts
+            }
+
+            # Build the ISO buildmode
+            _build_buildmode_iso() {
+                local image_name="${iso_name}-${iso_version}-${arch}.iso"
+                local run_once_mode="${buildmode}"
+                _build_iso_base
+                _run_once _build_iso_image
+            }
+
+            # build all buildmodes
+            _build() {
+                local buildmode
+                local run_once_mode="build"
+
+                for buildmode in "${buildmodes[@]}"; do
+                    _run_once "_build_buildmode_${buildmode}"
+                done
+            }
+
+            while getopts 'c:p:C:L:P:A:D:w:m:o:g:G:vh?' arg; do
+                case "${arg}" in
+                    p) read -r -a override_pkg_list <<< "${OPTARG}" ;;
+                    C) override_pacman_conf="${OPTARG}" ;;
+                    L) override_iso_label="${OPTARG}" ;;
+                    P) override_iso_publisher="${OPTARG}" ;;
+                    A) override_iso_application="${OPTARG}" ;;
+                    D) override_install_dir="${OPTARG}" ;;
+                    c) read -r -a override_cert_list <<< "${OPTARG}" ;;
+                    w) override_work_dir="${OPTARG}" ;;
+                    m) read -r -a override_buildmodes <<< "${OPTARG}" ;;
+                    o) override_out_dir="${OPTARG}" ;;
+                    g) override_gpg_key="${OPTARG}" ;;
+                    G) override_gpg_sender="${OPTARG}" ;;
+                    v) override_quiet="n" ;;
+                    h|?) _usage 0 ;;
+                    *)
+                        _msg_error "Invalid argument '${arg}'" 0
+                        _usage 1
+                        ;;
+                esac
+            done
+
+            shift $((OPTIND - 1))
+
+            if (( $# < 1 )); then
+                _msg_error "No profile specified" 0
+                _usage 1
             fi
-        else
-            (( validation_error=validation_error+1 ))
-            _msg_error "${_buildmode} is not a valid build mode!" 0
-        fi
-    done
 
-    if (( validation_error )); then
-        _msg_error "${validation_error} errors were encountered while validating the profile. Aborting." 1
-    fi
-    _msg_info "Done!"
-}
+            if (( EUID != 0 )); then
+                _msg_error "${app_name} must be run as root." 1
+            fi
 
-# Set defaults and, if present, overrides from mkarchiso command line option parameters
-_set_overrides() {
-    # Set variables that have command line overrides
-    [[ ! -v override_buildmodes ]] || buildmodes=("${override_buildmodes[@]}")
-    if (( ${#buildmodes[@]} < 1 )); then
-        buildmodes+=('iso')
-    fi
-    if [[ -v override_work_dir ]]; then
-        work_dir="$override_work_dir"
-    elif [[ -z "$work_dir" ]]; then
-        work_dir='./work'
-    fi
-    work_dir="$(realpath -- "$work_dir")"
-    if [[ -v override_out_dir ]]; then
-        out_dir="$override_out_dir"
-    elif [[ -z "$out_dir" ]]; then
-        out_dir='./out'
-    fi
-    out_dir="$(realpath -- "$out_dir")"
-    if [[ -v override_pacman_conf ]]; then
-        pacman_conf="$override_pacman_conf"
-    elif [[ -z "$pacman_conf" ]]; then
-        pacman_conf="/etc/pacman.conf"
-    fi
-    pacman_conf="$(realpath -- "$pacman_conf")"
-    [[ ! -v override_pkg_list ]] || pkg_list+=("${override_pkg_list[@]}")
-    # TODO: allow overriding bootstrap_pkg_list
-    if [[ -v override_iso_label ]]; then
-        iso_label="$override_iso_label"
-    elif [[ -z "$iso_label" ]]; then
-        iso_label="${app_name^^}"
-    fi
-    if [[ -v override_iso_publisher ]]; then
-        iso_publisher="$override_iso_publisher"
-    elif [[ -z "$iso_publisher" ]]; then
-        iso_publisher="${app_name}"
-    fi
-    if [[ -v override_iso_application ]]; then
-        iso_application="$override_iso_application"
-    elif [[ -z "$iso_application" ]]; then
-        iso_application="${app_name} iso"
-    fi
-    if [[ -v override_install_dir ]]; then
-        install_dir="$override_install_dir"
-    elif [[ -z "$install_dir" ]]; then
-        install_dir="${app_name}"
-    fi
-    [[ ! -v override_gpg_key ]] || gpg_key="$override_gpg_key"
-    [[ ! -v override_gpg_sender ]] || gpg_sender="$override_gpg_sender"
-    if [[ -v override_cert_list ]]; then
-        sign_netboot_artifacts="y"
-    fi
-    [[ ! -v override_cert_list ]] || cert_list+=("${override_cert_list[@]}")
-    if [[ -v override_quiet ]]; then
-        quiet="$override_quiet"
-    elif [[ -z "$quiet" ]]; then
-        quiet="y"
-    fi
+            # get the absolute path representation of the first non-option argument
+            profile="$(realpath -- "${1}")"
 
-    # Set variables that do not have overrides
-    [[ -n "$arch" ]] || arch="$(uname -m)"
-    [[ -n "$airootfs_image_type" ]] || airootfs_image_type="squashfs"
-    [[ -n "$iso_name" ]] || iso_name="${app_name}"
-}
+            _read_profile
+            _set_overrides
+            _validate_options
+            _build
 
-_export_gpg_publickey() {
-    rm -f -- "${work_dir}/pubkey.gpg"
-    gpg --batch --no-armor --output "${work_dir}/pubkey.gpg" --export "${gpg_key}"
-}
-
-_make_version() {
-    local _os_release
-
-    _msg_info "Creating version files..."
-    # Write version file to system installation dir
-    rm -f -- "${pacstrap_dir}/version"
-    printf '%s\n' "${iso_version}" > "${pacstrap_dir}/version"
-
-    if [[ "${buildmode}" == @("iso"|"netboot") ]]; then
-        install -d -m 0755 -- "${isofs_dir}/${install_dir}"
-        # Write version file to ISO 9660
-        printf '%s\n' "${iso_version}" > "${isofs_dir}/${install_dir}/version"
-        # Write grubenv with version information to ISO 9660
-        printf '%.1024s' "$(printf '# GRUB Environment Block\nNAME=%s\nVERSION=%s\n%s' \
-            "${iso_name}" "${iso_version}" "$(printf '%0.1s' "#"{1..1024})")" \
-            > "${isofs_dir}/${install_dir}/grubenv"
-    fi
-
-    # Append IMAGE_ID & IMAGE_VERSION to os-release
-    _os_release="$(realpath -- "${pacstrap_dir}/etc/os-release")"
-    if [[ ! -e "${pacstrap_dir}/etc/os-release" && -e "${pacstrap_dir}/usr/lib/os-release" ]]; then
-        _os_release="$(realpath -- "${pacstrap_dir}/usr/lib/os-release")"
-    fi
-    if [[ "${_os_release}" != "${pacstrap_dir}"* ]]; then
-        _msg_warning "os-release file '${_os_release}' is outside of valid path."
-    else
-        [[ ! -e "${_os_release}" ]] || sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' "${_os_release}"
-        printf 'IMAGE_ID=%s\nIMAGE_VERSION=%s\n' "${iso_name}" "${iso_version}" >> "${_os_release}"
-    fi
-    _msg_info "Done!"
-}
-
-_make_pkglist() {
-    _msg_info "Creating a list of installed packages on live-enviroment..."
-    case "${buildmode}" in
-        "bootstrap")
-            pacman -Q --sysroot "${pacstrap_dir}" > "${pacstrap_dir}/pkglist.${arch}.txt"
-            ;;
-        "iso"|"netboot")
-            install -d -m 0755 -- "${isofs_dir}/${install_dir}"
-            pacman -Q --sysroot "${pacstrap_dir}" > "${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
-            ;;
-    esac
-    _msg_info "Done!"
-}
-
-# build the base for an ISO and/or a netboot target
-_build_iso_base() {
-    local run_once_mode="base"
-    local buildmode_packages="${packages}"
-    # Set the package list to use
-    local buildmode_pkg_list=("${pkg_list[@]}")
-    # Set up essential directory paths
-    pacstrap_dir="${work_dir}/${arch}/airootfs"
-    isofs_dir="${work_dir}/iso"
-
-    # Create working directory
-    [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
-    # Write build date to file or if the file exists, read it from there
-    if [[ -e "${work_dir}/build_date" ]]; then
-        SOURCE_DATE_EPOCH="$(<"${work_dir}/build_date")"
-    else
-        printf '%s\n' "$SOURCE_DATE_EPOCH" > "${work_dir}/build_date"
-    fi
-
-    [[ "${quiet}" == "y" ]] || _show_config
-    _run_once _make_pacman_conf
-    [[ -z "${gpg_key}" ]] || _run_once _export_gpg_publickey
-    _run_once _make_custom_airootfs
-    _run_once _make_packages
-    _run_once _make_version
-    _run_once _make_customize_airootfs
-    _run_once _make_pkglist
-    _make_bootmodes
-    _run_once _cleanup_pacstrap_dir
-    _run_once _prepare_airootfs_image
-}
-
-# Build the bootstrap buildmode
-_build_buildmode_bootstrap() {
-    local image_name="${iso_name}-bootstrap-${iso_version}-${arch}.tar.gz"
-    local run_once_mode="${buildmode}"
-    local buildmode_packages="${bootstrap_packages}"
-    # Set the package list to use
-    local buildmode_pkg_list=("${bootstrap_pkg_list[@]}")
-
-    # Set up essential directory paths
-    pacstrap_dir="${work_dir}/${arch}/bootstrap/root.${arch}"
-    [[ -d "${work_dir}" ]] || install -d -- "${work_dir}"
-    install -d -m 0755 -o 0 -g 0 -- "${pacstrap_dir}"
-
-    [[ "${quiet}" == "y" ]] || _show_config
-    _run_once _make_pacman_conf
-    _run_once _make_packages
-    _run_once _make_version
-    _run_once _make_pkglist
-    _run_once _cleanup_pacstrap_dir
-    _run_once _build_bootstrap_image
-}
-
-# Build the netboot buildmode
-_build_buildmode_netboot() {
-    local run_once_mode="${buildmode}"
-
-    _build_iso_base
-    if [[ -v cert_list ]]; then
-        _run_once _sign_netboot_artifacts
-    fi
-    _run_once _export_netboot_artifacts
-}
-
-# Build the ISO buildmode
-_build_buildmode_iso() {
-    local image_name="${iso_name}-${iso_version}-${arch}.iso"
-    local run_once_mode="${buildmode}"
-    _build_iso_base
-    _run_once _build_iso_image
-}
-
-# build all buildmodes
-_build() {
-    local buildmode
-    local run_once_mode="build"
-
-    for buildmode in "${buildmodes[@]}"; do
-        _run_once "_build_buildmode_${buildmode}"
-    done
-}
-
-while getopts 'c:p:C:L:P:A:D:w:m:o:g:G:vh?' arg; do
-    case "${arg}" in
-        p) read -r -a override_pkg_list <<< "${OPTARG}" ;;
-        C) override_pacman_conf="${OPTARG}" ;;
-        L) override_iso_label="${OPTARG}" ;;
-        P) override_iso_publisher="${OPTARG}" ;;
-        A) override_iso_application="${OPTARG}" ;;
-        D) override_install_dir="${OPTARG}" ;;
-        c) read -r -a override_cert_list <<< "${OPTARG}" ;;
-        w) override_work_dir="${OPTARG}" ;;
-        m) read -r -a override_buildmodes <<< "${OPTARG}" ;;
-        o) override_out_dir="${OPTARG}" ;;
-        g) override_gpg_key="${OPTARG}" ;;
-        G) override_gpg_sender="${OPTARG}" ;;
-        v) override_quiet="n" ;;
-        h|?) _usage 0 ;;
-        *)
-            _msg_error "Invalid argument '${arg}'" 0
-            _usage 1
-            ;;
-    esac
-done
-
-shift $((OPTIND - 1))
-
-if (( $# < 1 )); then
-    _msg_error "No profile specified" 0
-    _usage 1
-fi
-
-if (( EUID != 0 )); then
-    _msg_error "${app_name} must be run as root." 1
-fi
-
-# get the absolute path representation of the first non-option argument
-profile="$(realpath -- "${1}")"
-
-_read_profile
-_set_overrides
-_validate_options
-_build
-
-# vim:ts=4:sw=4:et:
+            # vim:ts=4:sw=4:et:
